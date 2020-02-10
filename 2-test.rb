@@ -1,6 +1,14 @@
 # frozen_string_literal: true
 
 class Number < Struct.new(:value)
+  def to_ruby
+    "-> e { #{value.inspect} }"
+  end
+
+  def evaluate(environment)
+    self
+  end
+
   def reducible?
     false
   end
@@ -15,6 +23,10 @@ class Number < Struct.new(:value)
 end
 
 class Add < Struct.new(:left, :right)
+  def evaluate(environment)
+    Number.new(left.evaluate(environment).value + right.evaluate(environment).value)
+  end
+
   def reducible?
     true
   end
@@ -39,6 +51,10 @@ class Add < Struct.new(:left, :right)
 end
 
 class Multiply < Struct.new(:left, :right)
+  def evaluate(environment)
+    Number.new(left.evaluate(environment).value * right.evaluate(environment).value)
+  end
+
   def reducible?
     true
   end
@@ -63,6 +79,14 @@ class Multiply < Struct.new(:left, :right)
 end
 
 class Boolean < Struct.new(:value)
+  def to_ruby
+    "-> e { #{value.inspect} }"
+  end
+
+  def evaluate(environment)
+    self
+  end
+
   def reducible?
     false
   end
@@ -77,6 +101,10 @@ class Boolean < Struct.new(:value)
 end
 
 class LessThan < Struct.new(:left, :right)
+  def evaluate(environment)
+    Boolean.new(left.evaluate(environment).value < right.evaluate(environment).value)
+  end
+
   def reducible?
     true
   end
@@ -101,6 +129,10 @@ class LessThan < Struct.new(:left, :right)
 end
 
 class Variable < Struct.new(:name)
+  def evaluate(environment)
+    environment[name]
+  end
+
   def to_s
     name.to_s
   end
@@ -119,6 +151,10 @@ class Variable < Struct.new(:name)
 end
 
 class DoNothing
+  def evaluate(environment)
+    environment
+  end
+
   def to_s
     'do-nothing'
   end
@@ -137,6 +173,10 @@ class DoNothing
 end
 
 class Assign < Struct.new(:name, :expression)
+  def evaluate(environment)
+    environment.merge(name => expression.evaluate(environment))
+  end
+
   def to_s
     "#{name} = #{expression}"
   end
@@ -159,6 +199,15 @@ class Assign < Struct.new(:name, :expression)
 end
 
 class If < Struct.new(:condition, :consequence, :alternative)
+  def evaluate(environment)
+    case condition.evaluate(environment)
+    when Boolean.new(true)
+      consequence.evaluate(environment)
+    when Boolean.new(false)
+      alternative.evaluate(environment)
+    end
+  end
+
   def to_s
     "if (#{condition}) { #{consequence} ) else { #{alternative} }"
   end
@@ -201,6 +250,10 @@ class Machine < Struct.new(:statement, :environment)
 end
 
 class Sequence < Struct.new(:first, :second)
+  def evaluate(environment)
+    second.evaluate(first.evaluate(environment))
+  end
+
   def to_s
     "#{first}; #{second}"
   end
@@ -225,6 +278,15 @@ class Sequence < Struct.new(:first, :second)
 end
 
 class While < Struct.new(:condition, :body)
+  def evaluate(environment)
+    case condition.evaluate(environment)
+    when Boolean.new(true)
+      evaluate(body.evaluate(environment))
+    when Boolean.new(false)
+      environment
+    end
+  end
+
   def to_s
     "While (#{condition}) { #{body} }"
   end
@@ -242,6 +304,25 @@ class While < Struct.new(:condition, :body)
   end
 end
 
+# === INFO: Executeable ===
+
+statement = While.new(
+  LessThan.new(Variable.new(:x), Number.new(5)),
+  Assign.new(:x, Multiply.new(Variable.new(:x), Number.new(3)))
+)
+
+statement = Sequence.new(
+  Assign.new(:x, Add.new(Number.new(1), Number.new(1))),
+  Assign.new(:y, Add.new(Variable.new(:x), Number.new(3)))
+)
+
+Number.new(23).evaluate({})
+Variable.new(:x).evaluate(x: Number.new(23))
+LessThan.new(
+  Add.new(Variable.new(:x), Number.new(2)),
+  Variable.new(:y)
+).evaluate(x: Number.new(2), y: Number.new(5))
+
 # 評価に失敗する例
 Machine.new(
   Sequence.new(
@@ -257,7 +338,7 @@ Machine.new(
     Assign.new(:x, Multiply.new(Variable.new(:x), Number.new(3)))
   ),
   x: Number.new(1)
-).run
+)
 
 Machine.new(
   Sequence.new(
@@ -265,7 +346,7 @@ Machine.new(
     Assign.new(:y, Add.new(Variable.new(:x), Number.new(3)))
   ),
   {}
-).run
+)
 
 Machine.new(
   If.new(
@@ -274,7 +355,7 @@ Machine.new(
     Assign.new(:y, Number.new(2))
   ),
   x: Boolean.new(true)
-).run
+)
 
 Machine.new(
   If.new(
@@ -282,12 +363,12 @@ Machine.new(
     Assign.new(:y, Number.new(1)), DoNothing.new
   ),
   x: Boolean.new(false)
-).run
+)
 
 Machine.new(
   Assign.new(:x, Add.new(Variable.new(:x), Number.new(1))),
   x: Number.new(2)
-).run
+)
 
 expression = Add.new(
   Multiply.new(Number.new(1), Number.new(2)),
