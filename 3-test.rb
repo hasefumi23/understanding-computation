@@ -257,6 +257,21 @@ end
 class Choose < Struct.new(:first, :second)
   include Pattern
 
+  def to_nfa_design
+    first_nfa_design = first.to_nfa_design
+    second_nfa_design = second.to_nfa_design
+
+    start_state = Object.new
+    accept_states = first_nfa_design.accept_states + second_nfa_design.accept_states
+    rules = first_nfa_design.rulebook.rules + second_nfa_design.rulebook.rules
+    extra_rules = [first_nfa_design, second_nfa_design].map { |nfa_design|
+      FARule.new(start_state, nil, nfa_design.start_state)
+    }
+    rulebook = NFARulebook.new(rules + extra_rules)
+
+    NFADesign.new(start_state, accept_states, rulebook)
+  end
+
   def to_s
     [first, second].map { |pattern| pattern.bracket(precedence) }.join('|')
   end
@@ -268,6 +283,20 @@ end
 
 class Repeat < Struct.new(:pattern)
   include Pattern
+
+  def to_nfa_design
+    pattern_nfa_design = pattern.to_nfa_design
+
+    start_state = Object.new
+    accept_states = pattern_nfa_design.accept_states + [start_state]
+    rules = pattern_nfa_design.rulebook.rules
+    extra_rules = pattern_nfa_design.map { |accept_state|
+      FARule.new(accept_state, nil, pattern_nfa_design.start_state)
+    } + [FARule.new(start_state, nil, pattern_nfa_design.start_state)]
+    rulebook = NFARulebook.new(rules + extra_rules)
+
+    NFADesign.new(start_state, accept_states, rulebook)
+  end
 
   def to_s
     pattern.bracket(precedence) + '*'
@@ -296,3 +325,31 @@ nfa_design.accepts?('b')
 
 Empty.new.matches?('a')
 Literal.new('a').matches?('a')
+
+pattern = Concatenate.new(Literal.new('a'), Literal.new('b'))
+pattern.matches?('a')
+pattern.matches?('ab')
+pattern.matches?('abc')
+
+pattern = Concatenate.new(
+  Literal.new('a'),
+  Concatenate.new(Literal.new('b'), Literal.new('c'))
+)
+
+pattern.matches?('a')
+pattern.matches?('ab')
+pattern.matches?('abc')
+
+pattern = Choose.new(
+  Literal.new('a'),
+  Literal.new('b')
+)
+pattern.matches?('a')
+pattern.matches?('b')
+pattern.matches?('c')
+
+pattern = Repeat.new(Literal.new('a'))
+pattern.matches?('')
+pattern.matches?('a')
+pattern.matches?('aaaa')
+pattern.matches?('b')
